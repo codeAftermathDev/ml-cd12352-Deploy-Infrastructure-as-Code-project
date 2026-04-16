@@ -1,0 +1,256 @@
+Description: CD12352 - Infrastructure as Code Project - Udagram
+
+Parameters:
+  ProjectKey:
+    Type: String
+    Description: Key name used to tag project name
+    Default: project
+  ProjectName:
+    Type: String
+    Description: Udacity final project name
+    Default: Udagram
+  WebAppBucketName:
+    Type: String
+    Description: Provide unique name for S3 bucket
+  ServerImageId:
+    Type: String
+    Description: Provide AMI Identifier used for server instances
+
+Resources:
+  WebAppBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref WebAppBucketName
+      AccessControl: Private
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+
+  WebAppInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: web-app-instance-role
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-S3-Access"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:ListBucket'
+                Resource:
+                  - !GetAtt WebAppBucket.Arn
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:GetObject'
+                  - 's3:DeleteObject'
+                Resource:
+                  - !Sub "${WebAppBucket.Arn}/*"
+
+  WebAppInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref WebAppInstanceRole
+
+  LoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http traffic to load balancer
+      VpcId: 
+        Fn::ImportValue: 
+          Fn::Sub: "${ProjectName}-VPCID"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  WebAppSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http and ssh traffic to server instances
+      VpcId:
+        Fn::ImportValue: 
+          Fn::Sub: "${ProjectName}-VPCID"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+
+  WebAppLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets: 
+      - Fn::ImportValue: !Sub "${ProjectName}-PUBLIC-SUBNET-01"
+      - Fn::ImportValue: !Sub "${ProjectName}-PUBLIC-SUBNET-02"
+      SecurityGroups:
+        - !Ref LoadBalancerSG
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-WebApp-LB"
+
+  WebAppTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10 
+      HealthCheckPath: / 
+      HealthCheckProtocol: HTTP 
+      HealthCheckTimeoutSeconds: 8
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP 
+      UnhealthyThresholdCount: 5 
+      VpcId:
+        Fn::ImportValue: !Sub "${ProjectName}-VPCID"
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-WebApp-TG"
+
+  WebAppListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref WebAppLB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref WebAppTG
+          
+
+  WebAppListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref WebAppTG
+      Conditions:
+        - Field: path-pattern
+          Values: [/]
+      ListenerArn: !Ref WebAppListener
+      Priority: 100
+  
+  WebAppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateName: !Sub "${ProjectName}-server-template"
+      LaunchTemplateData:
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -ux
+            exec > /var/log/user-data.log 2>&1
+
+            apt-get update -y && apt-get install -y nginx unzip curl
+
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            ./aws/install
+            aws --version
+
+            WEBSITE_BUCKET=${WebAppBucketName}
+
+            if ! aws s3api head-object --bucket "$WEBSITE_BUCKET" --key index.html >/dev/null 2>&1; then
+            cat <<'EOF' >/tmp/index.html
+            <!DOCTYPE html>
+            <html>
+              <head><title>Udagram</title></head>
+              <body>
+                <h1>It works! Udagram, Udacity</h1>
+              </body>
+            </html>
+            EOF
+
+            aws s3 cp /tmp/index.html "s3://$WEBSITE_BUCKET/index.html"
+            fi
+
+            aws s3 sync "s3://$WEBSITE_BUCKET/" /var/www/html/
+
+            TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" \
+              -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+            INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s \
+              http://169.254.169.254/latest/meta-data/instance-id)
+
+            TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+            FILENAME="$INSTANCE_ID-$TIMESTAMP.txt"
+
+            echo "Uploaded from $INSTANCE_ID at $TIMESTAMP" > "/tmp/$FILENAME"
+            aws s3 cp "/tmp/$FILENAME" "s3://$WEBSITE_BUCKET/$FILENAME"
+
+            service nginx start
+        ImageId: !Ref ServerImageId
+        SecurityGroupIds:
+          - !Ref WebAppSG
+        InstanceType: t3.micro
+        IamInstanceProfile:
+          Name: !Ref WebAppInstanceProfile
+        BlockDeviceMappings:
+          - DeviceName: "/dev/sdk"
+            Ebs:
+              VolumeSize: 10
+
+  WebAppASG: 
+    Type: AWS::AutoScaling::AutoScalingGroup 
+    Properties: 
+      VPCZoneIdentifier: 
+        - Fn::ImportValue: !Sub "${ProjectName}-PRIVATE-SUBNET-01"
+        - Fn::ImportValue: !Sub "${ProjectName}-PRIVATE-SUBNET-02"
+      LaunchTemplate: 
+        LaunchTemplateId: !Ref WebAppLaunchTemplate 
+        Version: !GetAtt WebAppLaunchTemplate.LatestVersionNumber
+      MinSize: '2' 
+      DesiredCapacity: '2'
+      MaxSize: '4' 
+      TargetGroupARNs: 
+        - !Ref WebAppTG
+
+
+Outputs:
+  WebAppLBDNSName:
+    Description: Load balancer DNS name
+    Value: !GetAtt WebAppLB.DNSName
+    Export:
+      Name: !Sub "http:${ProjectName}-WEBAPP-LB-DNS"
