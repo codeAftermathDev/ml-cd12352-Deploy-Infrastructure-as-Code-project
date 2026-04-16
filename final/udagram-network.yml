@@ -1,0 +1,260 @@
+Description: CD12352 - Infrastructure as Code Project - Network
+
+Parameters:
+  ProjectKey:
+    Type: String
+    Description: Key name used to tag project name
+    Default: project
+  ProjectName:
+    Type: String
+    Description: Udacity final project name
+    Default: Udagram
+  VpcCIDR:
+    Type: String
+    Description: IP range for virtual private cloud
+    Default: 10.0.0.0/16
+  SubnetPrivate01CIDR:
+    Type: String
+    Description: IP range for subnet
+    Default: 10.0.1.0/24
+  SubnetPrivate02CIDR:
+    Type: String
+    Description: IP range for subnet
+    Default: 10.0.2.0/24
+  SubnetPublic01CIDR:
+    Type: String
+    Description: IP range for subnet
+    Default: 10.0.3.0/24
+  SubnetPublic02CIDR:
+    Type: String
+    Description: IP range for subnet
+    Default: 10.0.4.0/24
+
+Resources:  
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-VPC"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-IGW"
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+
+  PrivateSubnet01:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref SubnetPrivate01CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-PrivateSubnet-01"
+
+  PrivateSubnet02:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref SubnetPrivate02CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-PrivateSubnet-02"
+
+  PublicSubnet01:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref SubnetPublic01CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-PublicSubnet-01"
+
+  ElasticIP01:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-EIP-01"
+
+  NatGateway01:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP01.AllocationId
+      SubnetId: !Ref PublicSubnet01
+
+  PublicSubnet02:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref SubnetPublic02CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-PublicSubnet-02"
+
+  ElasticIP02:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-EIP-02"
+
+  NatGateway02:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP02.AllocationId
+      SubnetId: !Ref PublicSubnet02
+
+
+# Route Tables and Rules
+
+  PrivateSubnet01RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-PrivateSubnet-01-RT"
+  PrivateSubnet01RouteRule01:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateSubnet01RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway01
+  PrivateSubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateSubnet01RouteTable
+      SubnetId: !Ref PrivateSubnet01
+
+  PrivateSubnet02RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-PrivateSubnet-02-RT"
+  PrivateSubnet02RouteRule01:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateSubnet02RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway02
+  PrivateSubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateSubnet02RouteTable
+      SubnetId: !Ref PrivateSubnet02
+
+  PublicSubnet01RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-PublicSubnet-01-RT"
+  PublicSubnet01RouteRule01:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicSubnet01RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicSubnet01RouteTable
+      SubnetId: !Ref PublicSubnet01
+
+  PublicSubnet02RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: !Ref ProjectKey
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Sub "${ProjectName}-PublicSubnet-02-RT"
+  PublicSubnet02RouteRule01:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicSubnet02RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicSubnet02RouteTable
+      SubnetId: !Ref PublicSubnet02
+Outputs:
+  VpcId:
+    Description: A reference to the created VPC
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "${ProjectName}-VPCID"
+  PrivateSubnet01:
+    Description: Private subnet 
+    Value: !Ref PrivateSubnet01
+    Export:
+      Name: !Sub "${ProjectName}-PRIVATE-SUBNET-01"
+  PrivateSubnet02:
+    Description: Private subnet 
+    Value: !Ref PrivateSubnet02
+    Export:
+      Name: !Sub "${ProjectName}-PRIVATE-SUBNET-02"
+  PublicSubnet01:
+    Description: Public subnet
+    Value: !Ref PublicSubnet01
+    Export:
+      Name: !Sub "${ProjectName}-PUBLIC-SUBNET-01"
+  PublicSubnet02:
+    Description: Public subnet
+    Value: !Ref PublicSubnet02
+    Export:
+      Name: !Sub "${ProjectName}-PUBLIC-SUBNET-02"
+

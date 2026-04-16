@@ -1,0 +1,22 @@
+[
+	{
+		"ParameterKey": "VpcCIDR",
+		"ParameterValue": "11.0.0.0/16"
+	},
+		{
+		"ParameterKey": "SubnetPublic01CIDR",
+		"ParameterValue": "11.0.1.0/24"
+	},
+		{
+		"ParameterKey": "SubnetPrivate01CIDR",
+		"ParameterValue": "11.0.2.0/24"
+	},
+		{
+		"ParameterKey": "SubnetPublic02CIDR",
+		"ParameterValue": "11.0.3.0/24"
+	},
+		{
+		"ParameterKey": "SubnetPrivate02CIDR",
+		"ParameterValue": "11.0.4.0/24"
+	}
+]
