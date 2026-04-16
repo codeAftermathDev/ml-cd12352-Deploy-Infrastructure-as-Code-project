@@ -7,15 +7,19 @@ Start with provisioning the network infrastructure
 
 ```sh
 aws cloudformation create-stack --stack-name udagram-network \
-  --template-body file://final/udagram-network.yml \
-  --parameters file://final/udagram-network-parameters.json
+  --template-body file://final/network.yml \
+  --parameters file://final/network-parameters.json
 ```
 
-Followed by the resources needed for the webapp
+Followed by the resources needed for the webapp. 
+
+**NOTE:** The ```--capabilities``` flag is needed to create IAM resource
+
 ```sh
 aws cloudformation create-stack --stack-name udagram-webapp \
-  --template-body file://final/udagram-webapp.yml \
-  --parameters file://final/udagram-webapp-parameters.json
+  --template-body file://final/udagram.yml \
+  --parameters file://final/udagram-parameters.json \
+  --capabilities CAPABILITY_NAMED_IAM
 ```
 
 ## Tear down instructions
@@ -27,6 +31,11 @@ aws cloudformation delete-stack --stack-name udagram-webapp \
 ```
 
 ## Other considerations
+
+### Updating stack
+
+This ```--create-stack``` only works for creating the stack for the first time. 
+When updates are needed, switch to ```--update-stack``` .
 
 ### Debuggin server instances
 

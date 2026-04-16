@@ -251,6 +251,6 @@ Resources:
 Outputs:
   WebAppLBDNSName:
     Description: Load balancer DNS name
-    Value: !GetAtt WebAppLB.DNSName
+    Value: !Sub "http://${WebAppLB.DNSName}"
     Export:
-      Name: !Sub "http:${ProjectName}-WEBAPP-LB-DNS"
+      Name: !Sub "${ProjectName}-WEBAPP-LB-DNS"
