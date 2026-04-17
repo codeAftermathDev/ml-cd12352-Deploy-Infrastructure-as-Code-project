@@ -30,6 +30,13 @@ aws cloudformation delete-stack --stack-name udagram-webapp \
 
 ```
 
+## Verify CloudFormation Stack
+
+After a successful execution of the Cloudformation stack for **udagram-webapp**, 
+navigate to the link provided in the output by **WebAppLBDNSName**.
+
+[Link to Udagram](http://udagra-webap-mnqbkwa6up29-1074075706.us-east-1.elb.amazonaws.com/)
+
 ## Other considerations
 
 ### Updating stack
