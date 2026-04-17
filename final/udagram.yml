@@ -135,7 +135,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 10 
-      HealthCheckPath: / 
+      HealthCheckPath: /index.html
       HealthCheckProtocol: HTTP 
       HealthCheckTimeoutSeconds: 8
       HealthyThresholdCount: 2
@@ -181,7 +181,7 @@ Resources:
         UserData:
           Fn::Base64: !Sub |
             #!/bin/bash
-            set -ux
+            set -euxo pipefail
             exec > /var/log/user-data.log 2>&1
 
             apt-get update -y && apt-get install -y nginx unzip curl
@@ -208,6 +208,7 @@ Resources:
             fi
 
             aws s3 sync "s3://$WEBSITE_BUCKET/" /var/www/html/
+            rm -f /var/www/html/index.nginx-debian.html
 
             TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" \
               -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
@@ -220,7 +221,8 @@ Resources:
             echo "Uploaded from $INSTANCE_ID at $TIMESTAMP" > "/tmp/$FILENAME"
             aws s3 cp "/tmp/$FILENAME" "s3://$WEBSITE_BUCKET/$FILENAME"
 
-            service nginx start
+            systemctl enable nginx
+            systemctl restart nginx
         ImageId: !Ref ServerImageId
         SecurityGroupIds:
           - !Ref WebAppSG
