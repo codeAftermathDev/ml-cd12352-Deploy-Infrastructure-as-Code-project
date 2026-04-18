@@ -248,7 +248,8 @@ Resources:
       MaxSize: '4' 
       TargetGroupARNs: 
         - !Ref WebAppTG
-
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 300
 
 Outputs:
   WebAppLBDNSName:
